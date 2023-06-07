@@ -10,7 +10,10 @@ namespace sarto_aquarium_hmi.ViewModels
 {
     class MainViewModel : ObservableObject
     {
-        public string Temperature { get; set; } = string.Empty;
+        public string WaterTemperature { get; set; } = string.Empty;
+        public string THP_T { get; set; } = string.Empty;
+        public string THP_H { get; set; } = string.Empty;
+        public string THP_P { get; set; } = string.Empty;
         public List<string> PortNames { get; set; }
 
         public ICommand OpenCOM { get; set; }
@@ -18,10 +21,14 @@ namespace sarto_aquarium_hmi.ViewModels
 
         public MainViewModel()
         {
-            Temperature = "XX.X °C";
             PortNames = SerialPort.GetPortNames().ToList();
             OpenCOM = new RelayCommand(() => OnOpenCOM());
             CloseCOM = new RelayCommand(() => OnCloseCOM());
+
+            WaterTemperature = "XX.X °C";
+            THP_T = "XX.X °C";
+            THP_H = "XX %";
+            THP_P = "XXXX mbar";
         }
 
         private void OnCloseCOM()
