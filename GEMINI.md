@@ -4,12 +4,14 @@
 
 This project is a Python-based Human-Machine Interface (HMI) built using **Streamlit**. It is designed to visualize real-time data received from an external device (likely an Arduino) via a serial connection (COM port).
 
-The application reads a continuous stream of temperature and power metrics, parses the data, and displays it in a dynamic table on a web interface.
+The application reads a continuous stream of temperature and power metrics, parses the data, and displays it using interactive charts and metrics on a web interface.
 
 ## Key Features
 - **Serial Communication:** Connects to a configurable COM port and Baud rate.
-- **Real-time Visualization:** Updates the display as new data arrives.
-- **Data Parsing:** robustly extracts values using Regular Expressions.
+- **Real-time Visualization:** Dynamic line charts with dual Y-axes for temperature and power.
+- **Demo Mode:** Allows testing the UI with simulated data without hardware.
+- **Historical View:** Configurable time window for data display.
+- **Data Parsing:** Robustly extracts values using Regular Expressions.
 - **Metrics Monitored:**
     - `Soll` (Target Temperature)
     - `Ist` (Current Temperature)
@@ -22,7 +24,7 @@ The application reads a continuous stream of temperature and power metrics, pars
 Ensure you have Python installed. You will need to install the following dependencies:
 
 ```bash
-pip install streamlit pyserial
+pip install streamlit pyserial pandas altair
 ```
 
 ## Running the Application
@@ -36,8 +38,10 @@ This will launch a local web server (usually at `http://localhost:8501`) where y
 
 ## Configuration
 On the sidebar of the running application, you can configure:
-- **COM-Port:** The serial port where the device is connected (default: `COM6`).
+- **Demo-Modus:** Toggle between live serial data and simulated manual inputs.
+- **COM-Port:** The serial port where the device is connected.
 - **Baudrate:** The communication speed (default: `9600`).
+- **Zeitraum (Minuten):** Adjust the time window displayed in the chart.
 
 # Development Conventions
 
