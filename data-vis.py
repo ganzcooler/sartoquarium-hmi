@@ -1,22 +1,36 @@
-from serial import Serial
+import serial
 import serial.tools.list_ports
 import streamlit as st
 import re
 import pandas as pd
+import time
+import altair as alt
 from datetime import datetime, timedelta
 
-# Verfügbare COM-Ports abfragen
-available_ports = [port.device for port in serial.tools.list_ports.comports()]
-
 # Seitenleiste Konfiguration
-if not available_ports:
-    st.sidebar.error("Keine COM-Ports gefunden. Bitte schließen Sie ein Gerät an.")
-    st.stop()
-else:
-    port = st.sidebar.selectbox("COM-Port auswählen", available_ports)
+st.sidebar.header("Konfiguration")
+demo_mode = st.sidebar.toggle("Demo-Modus", value=False)
 
-baud = st.sidebar.number_input("Baudrate", 9600)
-minutes = st.sidebar.number_input("Zeitraum (Minuten)", min_value=1, value=10)
+if demo_mode:
+    st.sidebar.subheader("Demo Einstellungen")
+    # Manuelle Werte für Demo-Modus
+    soll_val = st.sidebar.number_input("Soll Temperatur (°C)", value=37.0)
+    ist_val = st.sidebar.slider("Ist Temperatur (°C)", 20.0, 50.0, 36.5)
+    t_sicher_val = st.sidebar.slider("T_sicher (°C)", 30.0, 60.0, 40.0)
+    leistung_val = st.sidebar.slider("Leistung (%)", 0.0, 100.0, 50.0)
+    
+    port = None
+    baud = 9600 # Dummy
+else:
+    # Verfügbare COM-Ports abfragen
+    available_ports = [port.device for port in serial.tools.list_ports.comports()]
+
+    if not available_ports:
+        st.sidebar.error("Keine COM-Ports gefunden. Bitte schließen Sie ein Gerät an oder aktivieren Sie den Demo-Modus.")
+        st.stop()
+    else:
+        port = st.sidebar.selectbox("COM-Port auswählen", available_ports)
+        baud = st.sidebar.number_input("Baudrate", 9600)
 
 st.title("Arduino Datenanzeige")
 
@@ -24,42 +38,56 @@ st.title("Arduino Datenanzeige")
 if 'history' not in st.session_state:
     st.session_state.history = []
 
-# Platzhalter für die UI-Elemente erstellen
-# "Soll" wird oben angezeigt
+# Platzhalter für die UI-Elemente
 soll_placeholder = st.empty()
-# Darunter das Diagramm
 chart_placeholder = st.empty()
-# Fehlermeldungen
+# Platzhalter für den Zeitraum-Input
+minutes_placeholder = st.empty()
 error_placeholder = st.empty()
 
-# Verbindung herstellen
-try:
-    # Hinweis: Dies öffnet den Port bei jedem Script-Rerun neu.
-    ser = Serial(port, baud, timeout=1)
-except Exception as e:
-    error_placeholder.error(f"Fehler beim Öffnen von {port}: {e}")
-    st.stop()
+ser = None
+if not demo_mode:
+    # Verbindung herstellen (nur im echten Modus)
+    try:
+        ser = serial.Serial(port, baud, timeout=1)
+    except Exception as e:
+        error_placeholder.error(f"Fehler beim Öffnen von {port}: {e}")
+        st.stop()
+
+# Das Eingabefeld wird EINMAL definiert (außerhalb der While-Schleife)
+# Es wird aber erst sichtbar, wenn wir Daten haben (durch den Placeholder)
+minutes_val = minutes_placeholder.number_input(
+    "Zeitraum (Minuten)", 
+    min_value=1, 
+    value=10
+)
 
 while True:
-    try:
-        # Lese Zeile vom Serial Port
-        line = ser.readline().decode().strip()
-    except Exception as e:
-        # Falls Lesen fehlschlägt (z.B. Gerät getrennt)
-        continue
+    soll, ist, t_sicher, leistung = 0.0, 0.0, 0.0, 0.0
+    valid_data = False
 
-    if not line:
-        continue
+    if demo_mode:
+        soll = soll_val
+        ist = ist_val
+        t_sicher = t_sicher_val
+        leistung = leistung_val
+        valid_data = True
+        time.sleep(0.5)
+    else:
+        try:
+            line = ser.readline().decode().strip()
+            if not line:
+                continue
+            
+            pattern = r"Soll: (\d+\.\d+) C, Ist: (\d+\.\d+) C, T_sicher: (\d+\.\d+) C, Leistung: (\d+\.\d+) %"
+            match = re.match(pattern, line)
+            if match:
+                soll, ist, t_sicher, leistung = map(float, match.groups())
+                valid_data = True
+        except Exception as e:
+            continue
 
-    # Regex Pattern Matching
-    pattern = r"Soll: (\d+\.\d+) C, Ist: (\d+\.\d+) C, T_sicher: (\d+\.\d+) C, Leistung: (\d+\.\d+) %"
-    match = re.match(pattern, line)
-
-    if match:
-        # Werte extrahieren
-        soll, ist, t_sicher, leistung = map(float, match.groups())
-        
-        # Aktueller Zeitstempel
+    if valid_data:
         now = datetime.now()
         
         # Neuen Datensatz zur Historie hinzufügen
@@ -70,8 +98,8 @@ while True:
             "Leistung": leistung
         })
         
-        # Daten bereinigen (nur Daten im gewünschten Zeitraum behalten)
-        cutoff_time = now - timedelta(minutes=minutes)
+        # Daten bereinigen basierend auf dem aktuellen Wert des Inputs
+        cutoff_time = now - timedelta(minutes=minutes_val)
         st.session_state.history = [
             d for d in st.session_state.history if d["Zeit"] > cutoff_time
         ]
@@ -82,9 +110,20 @@ while True:
         # 2. Liniendiagramm aktualisieren
         if st.session_state.history:
             df = pd.DataFrame(st.session_state.history)
-            # Zeit als Index setzen für korrekte x-Achse im Chart
-            df = df.set_index("Zeit")
-            chart_placeholder.line_chart(df)
-    else:
-        # Optional: Warnung bei unerwartetem Format, aber nicht bei jedem Loop spammen
-        pass
+            
+            base = alt.Chart(df).encode(x=alt.X('Zeit', axis=alt.Axis(title='Zeit', format='%H:%M:%S')))
+
+            temps = base.transform_fold(
+                ['Ist', 'T_sicher'],
+                as_=['Variable', 'Temperatur']
+            ).mark_line().encode(
+                y=alt.Y('Temperatur:Q', axis=alt.Axis(title='Temperatur (°C)')),
+                color='Variable:N'
+            )
+
+            power = base.mark_line(color='red').encode(
+                y=alt.Y('Leistung:Q', axis=alt.Axis(title='Leistung (%)', orient='right'))
+            )
+
+            combined_chart = alt.layer(temps, power).resolve_scale(y='independent')
+            chart_placeholder.altair_chart(combined_chart, use_container_width=True)
