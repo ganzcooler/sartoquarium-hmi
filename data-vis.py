@@ -72,7 +72,6 @@ while True:
         t_sicher = t_sicher_val
         leistung = leistung_val
         valid_data = True
-        time.sleep(0.5)
     else:
         try:
             line = ser.readline().decode().strip()
@@ -127,3 +126,6 @@ while True:
 
             combined_chart = alt.layer(temps, power).resolve_scale(y='independent')
             chart_placeholder.altair_chart(combined_chart, use_container_width=True)
+
+    if demo_mode:
+        time.sleep(0.5)
