@@ -15,7 +15,7 @@ if demo_mode:
     st.sidebar.subheader("Demo Einstellungen")
     # Manuelle Werte für Demo-Modus
     soll_val = st.sidebar.number_input("Soll Temperatur (°C)", value=37.0)
-    ist_val = st.sidebar.slider("Ist Temperatur (°C)", 20.0, 50.0, 36.5)
+    t_ist_val = st.sidebar.slider("T_ist Temperatur (°C)", 20.0, 50.0, 36.5)
     t_sicher_val = st.sidebar.slider("T_sicher (°C)", 30.0, 60.0, 40.0)
     leistung_val = st.sidebar.slider("Leistung (%)", 0.0, 100.0, 50.0)
     
@@ -32,7 +32,7 @@ else:
         port = st.sidebar.selectbox("COM-Port auswählen", available_ports)
         baud = st.sidebar.number_input("Baudrate", 9600)
 
-st.title("Arduino Datenanzeige")
+st.title("Sartoquarium")
 
 # Session State für Datenhistorie initialisieren
 if 'history' not in st.session_state:
@@ -63,12 +63,12 @@ minutes_val = minutes_placeholder.number_input(
 )
 
 while True:
-    soll, ist, t_sicher, leistung = 0.0, 0.0, 0.0, 0.0
+    soll, t_ist, t_sicher, leistung = 0.0, 0.0, 0.0, 0.0
     valid_data = False
 
     if demo_mode:
         soll = soll_val
-        ist = ist_val
+        t_ist = t_ist_val
         t_sicher = t_sicher_val
         leistung = leistung_val
         valid_data = True
@@ -78,10 +78,10 @@ while True:
             if not line:
                 continue
             
-            pattern = r"Soll: (\d+\.\d+) C, Ist: (\d+\.\d+) C, T_sicher: (\d+\.\d+) C, Leistung: (\d+\.\d+) %"
+            pattern = r"Soll: (\d+\.\d+) C, T_ist: (\d+\.\d+) C, T_sicher: (\d+\.\d+) C, Leistung: (\d+\.\d+) %"
             match = re.match(pattern, line)
             if match:
-                soll, ist, t_sicher, leistung = map(float, match.groups())
+                soll, t_ist, t_sicher, leistung = map(float, match.groups())
                 valid_data = True
         except Exception as e:
             continue
@@ -92,7 +92,7 @@ while True:
         # Neuen Datensatz zur Historie hinzufügen
         st.session_state.history.append({
             "Zeit": now,
-            "Ist": ist,
+            "T_ist": t_ist,
             "T_sicher": t_sicher,
             "Leistung": leistung
         })
@@ -112,16 +112,24 @@ while True:
             
             base = alt.Chart(df).encode(x=alt.X('Zeit', axis=alt.Axis(title='Zeit', format='%H:%M:%S')))
 
-            temps = base.transform_fold(
-                ['Ist', 'T_sicher'],
-                as_=['Variable', 'Temperatur']
+            # Gemeinsames Folding für eine einheitliche Legende
+            folded = base.transform_fold(
+                ['T_ist', 'T_sicher', 'Leistung'],
+                as_=['Variable', 'Wert']
+            )
+
+            temps = folded.transform_filter(
+                (alt.datum.Variable == 'T_ist') | (alt.datum.Variable == 'T_sicher')
             ).mark_line().encode(
-                y=alt.Y('Temperatur:Q', axis=alt.Axis(title='Temperatur (°C)')),
+                y=alt.Y('Wert:Q', axis=alt.Axis(title='Temperatur [°C]')),
                 color='Variable:N'
             )
 
-            power = base.mark_line(color='red').encode(
-                y=alt.Y('Leistung:Q', axis=alt.Axis(title='Leistung (%)', orient='right'))
+            power = folded.transform_filter(
+                alt.datum.Variable == 'Leistung'
+            ).mark_line().encode(
+                y=alt.Y('Wert:Q', axis=alt.Axis(title='Leistung [%]', orient='right')),
+                color='Variable:N'
             )
 
             combined_chart = alt.layer(temps, power).resolve_scale(y='independent')
